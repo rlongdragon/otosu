@@ -94,7 +94,11 @@ if command -v tmux >/dev/null 2>&1; then
     if tmux list-sessions >/dev/null 2>&1; then
         tmux source-file "$conf" >/dev/null 2>&1 || true
     fi
-    tmux_note="tmux: press prefix + i, or run ':otosu <code>'"
+
+    # Read the key back out of the generated plugin rather than repeating it
+    # here, so this message cannot drift away from what was actually bound.
+    key=$(sed -n 's/^# otosu-key: //p' "$plugin" | head -1)
+    tmux_note="tmux: press prefix + ${key:-v}, or run ':otosu <code>'"
 else
     tmux_note="tmux not found, so only the CLI was installed"
 fi
