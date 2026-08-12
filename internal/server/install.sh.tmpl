@@ -1,0 +1,119 @@
+#!/bin/sh
+# otosu installer.
+#
+# Served by your own otosu server with its URL already baked in, so there is
+# nothing to edit. It installs no credentials: a drop code is the only thing
+# needed to collect a file, which is why this command is safe to paste anywhere.
+#
+#   curl -fsSL {{.BaseURL}}/install | sh
+
+set -eu
+
+SERVER="{{.BaseURL}}"
+REPO="rlongdragon/otosu"
+BIN_DIR="${OTOSU_BIN_DIR:-$HOME/.local/bin}"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/otosu"
+MARKER="# otosu (managed)"
+
+say()  { printf '%s\n' "$*" >&2; }
+fail() { printf 'otosu: %s\n' "$*" >&2; exit 1; }
+
+need() {
+    command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+}
+
+# ------------------------------------------------------------------ platform ---
+
+need uname
+need mkdir
+need tar
+
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+case "$os" in
+    linux|darwin) ;;
+    *) fail "unsupported OS: $os" ;;
+esac
+
+arch=$(uname -m)
+case "$arch" in
+    x86_64|amd64) arch=amd64 ;;
+    aarch64|arm64) arch=arm64 ;;
+    *) fail "unsupported architecture: $arch" ;;
+esac
+
+if command -v curl >/dev/null 2>&1; then
+    fetch() { curl -fsSL "$1"; }
+elif command -v wget >/dev/null 2>&1; then
+    fetch() { wget -qO- "$1"; }
+else
+    fail "need curl or wget"
+fi
+
+# ------------------------------------------------------------------- binary ---
+
+asset="otosu_${os}_${arch}.tar.gz"
+url="https://github.com/${REPO}/releases/latest/download/${asset}"
+
+say "otosu: downloading ${asset}"
+mkdir -p "$BIN_DIR"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT INT TERM
+
+fetch "$url" > "$tmp/$asset" || fail "download failed: $url"
+tar -xzf "$tmp/$asset" -C "$tmp" || fail "could not extract $asset"
+[ -f "$tmp/otosu" ] || fail "archive did not contain an otosu binary"
+
+install -m 0755 "$tmp/otosu" "$BIN_DIR/otosu" 2>/dev/null \
+    || { cp "$tmp/otosu" "$BIN_DIR/otosu" && chmod 0755 "$BIN_DIR/otosu"; }
+
+# --------------------------------------------------------------------- config ---
+
+mkdir -p "$CONFIG_DIR"
+printf 'server=%s\n' "$SERVER" > "$CONFIG_DIR/config"
+chmod 0600 "$CONFIG_DIR/config"
+
+# ----------------------------------------------------------------------- tmux ---
+
+if command -v tmux >/dev/null 2>&1; then
+    plugin="$CONFIG_DIR/otosu.tmux"
+    "$BIN_DIR/otosu" tmux-plugin > "$plugin"
+    chmod 0755 "$plugin"
+
+    if [ -f "$HOME/.config/tmux/tmux.conf" ]; then
+        conf="$HOME/.config/tmux/tmux.conf"
+    else
+        conf="$HOME/.tmux.conf"
+    fi
+
+    # Idempotent: drop any previous managed line before adding the current one.
+    if [ -f "$conf" ] && grep -q "$MARKER" "$conf" 2>/dev/null; then
+        grep -v "$MARKER" "$conf" > "$conf.otosu-tmp" && mv "$conf.otosu-tmp" "$conf"
+    fi
+    printf 'run-shell %s %s\n' "$plugin" "$MARKER" >> "$conf"
+
+    if tmux list-sessions >/dev/null 2>&1; then
+        tmux source-file "$conf" >/dev/null 2>&1 || true
+    fi
+    tmux_note="tmux: press prefix + i, or run ':otosu <code>'"
+else
+    tmux_note="tmux not found, so only the CLI was installed"
+fi
+
+# ------------------------------------------------------------------- verify ---
+
+if ! fetch "$SERVER/healthz" >/dev/null 2>&1; then
+    say "otosu: warning - could not reach $SERVER/healthz from this machine"
+fi
+
+case ":$PATH:" in
+    *":$BIN_DIR:"*) path_note="" ;;
+    *) path_note="add $BIN_DIR to your PATH" ;;
+esac
+
+say ""
+say "otosu installed to $BIN_DIR/otosu"
+say "  server: $SERVER"
+say "  $tmux_note"
+[ -n "$path_note" ] && say "  $path_note"
+say ""
+say "Collect a drop with:  otosu pull <code>"

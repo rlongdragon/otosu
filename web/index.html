@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>otosu</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --ink: #1a1a19;
+    --muted: #6b6a66;
+    --line: #e3e2de;
+    --accent: #2f6f4e;
+    --accent-ink: #ffffff;
+    --danger: #a33;
+    --code-bg: #f2f1ed;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181a;
+      --panel: #1e2124;
+      --ink: #e8e6e1;
+      --muted: #9a9891;
+      --line: #2e3236;
+      --accent: #6cc79a;
+      --accent-ink: #10221a;
+      --danger: #e58;
+      --code-bg: #14171a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1rem 4rem;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 44rem; margin: 0 auto; }
+  h1 {
+    margin: 0 0 .25rem;
+    font-size: 1.4rem;
+    letter-spacing: -.01em;
+  }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .sub { margin: 0 0 2rem; color: var(--muted); font-size: .9rem; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .hidden { display: none !important; }
+
+  #drop {
+    border: 2px dashed var(--line);
+    border-radius: 10px;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    color: var(--muted);
+    transition: border-color .15s, background .15s;
+    cursor: pointer;
+  }
+  #drop:hover, #drop.hot { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  #drop strong { display: block; color: var(--ink); font-size: 1.05rem; margin-bottom: .35rem; }
+  #drop kbd {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .1rem .35rem;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  input[type=password], input[type=text] {
+    width: 100%;
+    padding: .6rem .7rem;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+  }
+  button {
+    padding: .6rem 1.1rem;
+    border: 0;
+    border-radius: 7px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    font-weight: 400;
+  }
+  .row { display: flex; gap: .6rem; align-items: center; }
+
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .85rem;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: .7rem .8rem;
+    overflow-x: auto;
+    margin: .5rem 0 0;
+  }
+
+  .drop-item { border-top: 1px solid var(--line); padding: .9rem 0; }
+  .drop-item:first-child { border-top: 0; padding-top: 0; }
+  .drop-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+  .drop-name { font-weight: 600; word-break: break-all; }
+  .drop-meta { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+  .ref {
+    display: block;
+    width: 100%;
+    margin-top: .5rem;
+    padding: .55rem .65rem;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: var(--ink);
+    word-break: break-all;
+    text-align: left;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .8rem;
+    font-weight: 400;
+    cursor: copy;
+  }
+  .ref:hover { border-color: var(--accent); }
+
+  .note { color: var(--muted); font-size: .82rem; margin: .5rem 0 0; }
+  .err { color: var(--danger); }
+  .ok { color: var(--accent); font-weight: 600; }
+  progress { width: 100%; height: .4rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>otosu <span>落とす</span></h1>
+  <p class="sub">Encrypt in the browser, collect from any dev box with one code.</p>
+
+  <section id="login" class="panel hidden">
+    <form id="login-form" class="row">
+      <input type="password" id="token" placeholder="Login token" autocomplete="current-password" required>
+      <button type="submit">Log in</button>
+    </form>
+    <p class="note" id="login-msg"></p>
+  </section>
+
+  <section id="app" class="hidden">
+    <div id="drop" tabindex="0" role="button" aria-label="Paste or drop a file">
+      <strong>Paste a screenshot, or drop a file</strong>
+      <kbd>Ctrl</kbd> + <kbd>V</kbd> anywhere on this page, or click to browse
+      <input type="file" id="file" class="hidden" multiple>
+    </div>
+    <p class="note" id="status"></p>
+    <progress id="bar" class="hidden"></progress>
+
+    <div id="drops" class="panel hidden"></div>
+
+    <div class="panel">
+      <strong>Set up a dev box</strong>
+      <p class="note">Runs as your own user, installs no secrets.</p>
+      <pre id="install">curl -fsSL .../install | sh</pre>
+      <div class="row" style="margin-top:.7rem">
+        <button class="ghost" id="copy-install">Copy install command</button>
+        <button class="ghost" id="logout">Log out</button>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
