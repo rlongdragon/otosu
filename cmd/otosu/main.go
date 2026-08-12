@@ -255,7 +255,10 @@ func inject(pane, path string) error {
 
 func runTmuxPlugin(args []string) error {
 	fs := flag.NewFlagSet("tmux-plugin", flag.ExitOnError)
-	key := fs.String("key", "i", "prefix key that prompts for a code")
+	// "v" is unbound in default tmux, and unlike Ctrl-based keys it is not
+	// swallowed by terminal emulators before tmux ever sees it. Windows Terminal
+	// binds Ctrl+V to paste, for instance.
+	key := fs.String("key", "v", "prefix key that prompts for a code")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
