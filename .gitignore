@@ -1,4 +1,5 @@
-bin/
-dist/
+# Built binary at the repo root. The leading slash matters: a bare "otosu"
+# would also ignore the cmd/otosu package directory.
+/otosu
+/dist/
 *.pem
-otosu
