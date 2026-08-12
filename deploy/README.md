@@ -53,7 +53,7 @@ Edit the `ExecStart` flags if your hostname or port differ from the defaults.
 systemctl status otosu
 journalctl -u otosu -f
 curl -fsS http://127.0.0.1:8099/healthz          # the service itself
-curl -fsS https://otosu.rlongdragon.com/healthz  # through the proxy
+curl -fsS https://otosu.example.com/healthz  # through the proxy
 ```
 
 `systemd-analyze security otosu` should report an exposure level around 1.5.
@@ -64,7 +64,7 @@ Add a proxy host with:
 
 | Field | Value |
 | --- | --- |
-| Domain Names | `otosu.rlongdragon.com` |
+| Domain Names | `otosu.example.com` |
 | Scheme | `http` |
 | Forward Hostname / IP | `127.0.0.1` |
 | Forward Port | `8099` |

@@ -24,7 +24,7 @@ EnvironmentFile=/etc/otosu/env
 # AmbientCapabilities=CAP_NET_BIND_SERVICE plus CacheDirectory=otosu.
 ExecStart=/usr/local/bin/otosu serve \
     -addr 127.0.0.1:8099 \
-    -base-url https://otosu.rlongdragon.com \
+    -base-url https://otosu.example.com \
     -trusted-proxy 127.0.0.1
 
 Restart=on-failure

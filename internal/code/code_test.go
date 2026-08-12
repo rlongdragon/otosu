@@ -103,7 +103,7 @@ func TestParseRefAcceptsURL(t *testing.T) {
 	key, _ := wire.NewKey()
 	ref := Ref{Code: "B4K7QW2M", Key: key}
 
-	got, err := ParseRef("https://otosu.rlongdragon.com/d/" + ref.String())
+	got, err := ParseRef("https://otosu.example.com/d/" + ref.String())
 	if err != nil {
 		t.Fatalf("ParseRef on full URL: %v", err)
 	}
