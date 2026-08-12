@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Tool identifies an agent CLI, which decides how a file path must be written
@@ -71,6 +72,38 @@ func Inject(pane string, tool Tool, path string) error {
 // InTmux reports whether a tmux server is reachable.
 func InTmux() bool {
 	return exec.Command("tmux", "list-sessions").Run() == nil
+}
+
+// Status writes a message into the tmux status line, where it stays for hold
+// and then disappears on its own. A later message replaces an earlier one.
+func Status(msg string, hold time.Duration) {
+	ms := strconv.FormatInt(hold.Milliseconds(), 10)
+	// Failure is not interesting: the status line is a convenience, and the
+	// caller still reports the outcome on stderr.
+	_ = exec.Command("tmux", "display-message", "-d", ms, msg).Run()
+}
+
+// statusHold is how long a progress frame lingers if nothing replaces it. It
+// only matters if a transfer stalls, so it is comfortably longer than the
+// update interval.
+const statusHold = 4 * time.Second
+
+// NewStatusProgress returns a Progress that draws a bar in the tmux status
+// line, throttled so a fast transfer does not spawn a tmux process per read.
+func NewStatusProgress() Progress {
+	const minInterval = 100 * time.Millisecond
+
+	var last time.Time
+	return func(done, total int64) {
+		// Always draw the final frame, so the bar visibly reaches 100%.
+		complete := total > 0 && done >= total
+		if !complete && time.Since(last) < minInterval {
+			return
+		}
+		last = time.Now()
+
+		Status("otosu  "+Bar(done, total), statusHold)
+	}
 }
 
 // process is one row of the system process table.

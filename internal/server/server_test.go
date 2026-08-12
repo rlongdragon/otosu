@@ -255,7 +255,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	path, err := client.Pull(ts.URL, code.Ref{Code: dropCode, Key: key}, dir)
+	path, err := client.Pull(ts.URL, code.Ref{Code: dropCode, Key: key}, dir, nil)
 	if err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestPullWrongKeyFails(t *testing.T) {
 	dropCode, _ := createDrop(t, ts, browser, blob)
 
 	wrong, _ := wire.NewKey()
-	if _, err := client.Pull(ts.URL, code.Ref{Code: dropCode, Key: wrong}, t.TempDir()); err == nil {
+	if _, err := client.Pull(ts.URL, code.Ref{Code: dropCode, Key: wrong}, t.TempDir(), nil); err == nil {
 		t.Fatal("Pull succeeded with the wrong key")
 	}
 }

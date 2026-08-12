@@ -26,8 +26,11 @@ var ErrNotFound = errors.New("drop not found: the code may be wrong, already col
 
 // Pull fetches the drop named by ref, decrypts it, and writes it into dir.
 // It returns the path of the written file.
-func Pull(server string, ref code.Ref, dir string) (string, error) {
-	blob, err := download(server, ref.Code)
+//
+// report may be nil. When set it is called as bytes arrive, which the tmux
+// integration uses to draw a progress bar in the status line.
+func Pull(server string, ref code.Ref, dir string, report Progress) (string, error) {
+	blob, err := download(server, ref.Code, report)
 	if err != nil {
 		return "", err
 	}
@@ -50,7 +53,7 @@ func Pull(server string, ref code.Ref, dir string) (string, error) {
 	return path, nil
 }
 
-func download(server, c string) ([]byte, error) {
+func download(server, c string, report Progress) ([]byte, error) {
 	url := strings.TrimRight(server, "/") + "/d/" + c
 
 	client := &http.Client{Timeout: 2 * time.Minute}
@@ -70,7 +73,13 @@ func download(server, c string) ([]byte, error) {
 		return nil, fmt.Errorf("server returned %s", resp.Status)
 	}
 
-	blob, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxDownload+1))
+	body := io.Reader(io.LimitReader(resp.Body, DefaultMaxDownload+1))
+	if report != nil {
+		// ContentLength is -1 when the server did not send one; Bar copes.
+		body = &progressReader{r: body, total: resp.ContentLength, report: report}
+	}
+
+	blob, err := io.ReadAll(body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}

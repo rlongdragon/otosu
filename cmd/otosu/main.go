@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/rlongdragon/otosu/internal/client"
 	"github.com/rlongdragon/otosu/internal/code"
@@ -197,8 +198,20 @@ func runPull(args []string) error {
 		return err
 	}
 
-	path, err := client.Pull(url, ref, target)
+	// Draw a progress bar in the tmux status line, but only when the result is
+	// going into a pane: with -N the caller wants a plain path on stdout.
+	var report client.Progress
+	inTmux := client.InTmux()
+	if inTmux && !*noInject {
+		client.Status("otosu  fetching…", 4*time.Second)
+		report = client.NewStatusProgress()
+	}
+
+	path, err := client.Pull(url, ref, target, report)
 	if err != nil {
+		if report != nil {
+			client.Status("otosu  ✗ "+err.Error(), 5*time.Second)
+		}
 		return err
 	}
 
@@ -206,7 +219,24 @@ func runPull(args []string) error {
 		fmt.Println(path)
 		return nil
 	}
-	return inject(*pane, path)
+
+	if err := inject(*pane, path); err != nil {
+		if inTmux {
+			client.Status("otosu  ✗ "+err.Error(), 5*time.Second)
+		}
+		return err
+	}
+
+	if inTmux {
+		info, statErr := os.Stat(path)
+		size := ""
+		if statErr == nil {
+			size = " (" + client.HumanBytes(info.Size()) + ")"
+		}
+		// Stays briefly, then clears itself.
+		client.Status("otosu  ✓ download done!  "+filepath.Base(path)+size, 2500*time.Millisecond)
+	}
+	return nil
 }
 
 // inject types the path into the agent pane, falling back to printing it when
