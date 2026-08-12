@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # A broken release is worse than a late one, so the full suite runs again
+      # here rather than trusting the CI run on the commit.
+      - name: Test
+        run: go test -race ./...
+
+      - name: Build release archives
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -eu
+          mkdir -p dist
+
+          # The installer served by the server fetches
+          # otosu_${os}_${arch}.tar.gz from the latest release, so these names
+          # are part of the contract.
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os=${target%/*}
+            arch=${target#*/}
+
+            echo "building $os/$arch"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+              go build -trimpath \
+                -ldflags "-s -w -X main.version=${VERSION}" \
+                -o "dist/otosu" ./cmd/otosu
+
+            tar -czf "dist/otosu_${os}_${arch}.tar.gz" -C dist otosu
+            rm dist/otosu
+          done
+
+          cd dist && sha256sum ./*.tar.gz > checksums.txt
+          cat checksums.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --generate-notes \
+            dist/otosu_*.tar.gz dist/checksums.txt

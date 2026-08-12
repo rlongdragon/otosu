@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -19,13 +20,14 @@ import (
 )
 
 type serveConfig struct {
-	domain    string // production: hostname for automatic HTTPS
-	addr      string // development: plain HTTP listen address
-	baseURL   string
-	certDir   string
-	token     string
-	generated bool
-	log       *slog.Logger
+	domain         string // production: hostname for automatic HTTPS
+	addr           string // development: plain HTTP listen address
+	baseURL        string
+	certDir        string
+	token          string
+	generated      bool
+	trustedProxies []netip.Prefix
+	log            *slog.Logger
 }
 
 func newToken() (string, error) { return server.NewToken() }
@@ -51,10 +53,11 @@ func serve(cfg serveConfig) error {
 		Token:   cfg.token,
 		BaseURL: base,
 		Store:   st,
-		// A Secure cookie is dropped by browsers over plain HTTP, so it can only
-		// be set in production.
-		SecureCookies: prod,
-		Logger:        cfg.log,
+		// New also turns this on whenever the public URL is https, which covers
+		// running behind a TLS terminating proxy on a plain HTTP listener.
+		SecureCookies:  prod,
+		TrustedProxies: cfg.trustedProxies,
+		Logger:         cfg.log,
 	})
 	if err != nil {
 		return err

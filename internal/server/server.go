@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -30,20 +31,24 @@ type Options struct {
 	BaseURL string
 	// Store holds live drops. Required.
 	Store *store.Store
-	// SecureCookies marks the session cookie Secure. Disable only for local
-	// plain HTTP development.
+	// SecureCookies marks the session cookie Secure. Derived from BaseURL when
+	// the server is constructed, so a TLS terminating proxy still gets it right.
 	SecureCookies bool
+	// TrustedProxies lists the networks whose X-Forwarded-For header may be
+	// believed. Leave empty when otosu faces clients directly.
+	TrustedProxies []netip.Prefix
 	// Logger receives request and error logs. Defaults to slog.Default().
 	Logger *slog.Logger
 }
 
 // Server routes HTTP requests for the drop service.
 type Server struct {
-	store         *store.Store
-	token         string
-	baseURL       string
-	secureCookies bool
-	log           *slog.Logger
+	store          *store.Store
+	token          string
+	baseURL        string
+	secureCookies  bool
+	trustedProxies []netip.Prefix
+	log            *slog.Logger
 
 	// tight guards the endpoints an attacker would hammer: code lookups and
 	// login attempts. loose guards everything else.
@@ -62,14 +67,22 @@ func New(opt Options) (*Server, error) {
 	if opt.Logger == nil {
 		opt.Logger = slog.Default()
 	}
+	base := strings.TrimRight(opt.BaseURL, "/")
+
+	// A Secure cookie over plain HTTP is silently dropped by the browser, and a
+	// non-Secure cookie behind an HTTPS proxy leaks on any downgrade. The public
+	// scheme is the only thing that decides this correctly.
+	secure := opt.SecureCookies || strings.HasPrefix(base, "https://")
+
 	return &Server{
-		store:         opt.Store,
-		token:         opt.Token,
-		baseURL:       strings.TrimRight(opt.BaseURL, "/"),
-		secureCookies: opt.SecureCookies,
-		log:           opt.Logger,
-		tight:         newLimiter(5, 10),
-		loose:         newLimiter(20, 40),
+		store:          opt.Store,
+		token:          opt.Token,
+		baseURL:        base,
+		secureCookies:  secure,
+		trustedProxies: opt.TrustedProxies,
+		log:            opt.Logger,
+		tight:          newLimiter(5, 10),
+		loose:          newLimiter(20, 40),
 	}, nil
 }
 
@@ -77,8 +90,8 @@ func New(opt Options) (*Server, error) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	tight := func(h http.HandlerFunc) http.Handler { return s.tight.middleware(h) }
-	loose := func(h http.HandlerFunc) http.Handler { return s.loose.middleware(h) }
+	tight := func(h http.HandlerFunc) http.Handler { return s.tight.middleware(s.clientIP, h) }
+	loose := func(h http.HandlerFunc) http.Handler { return s.loose.middleware(s.clientIP, h) }
 
 	mux.Handle("GET /{$}", loose(s.handleIndex))
 	mux.Handle("GET /app.js", loose(s.handleAsset))
@@ -169,7 +182,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.checkToken(body.Token) {
-		s.log.Warn("login failed", "ip", clientIP(r))
+		s.log.Warn("login failed", "ip", s.clientIP(r))
 		writeJSONError(w, http.StatusUnauthorized, "wrong token")
 		return
 	}
@@ -245,7 +258,7 @@ func (s *Server) handleFetchDrop(w http.ResponseWriter, r *http.Request) {
 	}
 	blob, err := s.store.Get(c)
 	if err != nil {
-		s.log.Warn("drop miss", "ip", clientIP(r), "code", c)
+		s.log.Warn("drop miss", "ip", s.clientIP(r), "code", c)
 		http.NotFound(w, r)
 		return
 	}

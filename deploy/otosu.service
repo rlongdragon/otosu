@@ -1,0 +1,78 @@
+[Unit]
+Description=otosu drop service
+Documentation=https://github.com/rlongdragon/otosu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=otosu
+Group=otosu
+
+# OTOSU_TOKEN=<login token> lives here. Keep it 0600 and owned by root.
+EnvironmentFile=/etc/otosu/env
+
+# Behind a TLS terminating reverse proxy.
+#
+#   -addr           loopback only, so the port is not exposed directly
+#   -base-url       the public origin; also what marks the session cookie Secure
+#   -trusted-proxy  whose X-Forwarded-For may be believed, otherwise every
+#                   request would share one rate limit bucket
+#
+# To terminate TLS in otosu itself instead, replace these with
+# "-domain <host> -cert-dir /var/cache/otosu/certs" and restore
+# AmbientCapabilities=CAP_NET_BIND_SERVICE plus CacheDirectory=otosu.
+ExecStart=/usr/local/bin/otosu serve \
+    -addr 127.0.0.1:8099 \
+    -base-url https://otosu.rlongdragon.com \
+    -trusted-proxy 127.0.0.1
+
+Restart=on-failure
+RestartSec=5s
+
+# ---------------------------------------------------------------- hardening ---
+# The service is reachable from the public internet and shares a machine with
+# development work, so a compromise must not become a foothold.
+
+# An unprivileged port needs no capabilities at all.
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=true
+
+# Filesystem: read-only system, no access to any home directory. Drops live in
+# memory, so the service never needs to write anywhere.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+UMask=0077
+
+# Kernel and process isolation.
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+PrivateDevices=true
+DevicePolicy=closed
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Only IP sockets are ever needed.
+RestrictAddressFamilies=AF_INET AF_INET6
+
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Drops are held in memory; cap it so a flood cannot take the machine down.
+MemoryMax=1G
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target

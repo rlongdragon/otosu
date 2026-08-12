@@ -3,6 +3,8 @@ package server
 import (
 	"net"
 	"net/http"
+	"net/netip"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,10 +64,11 @@ func (l *limiter) allow(ip string) bool {
 	return b.lim.Allow()
 }
 
-// middleware rejects requests from clients that exceed the bucket.
-func (l *limiter) middleware(next http.Handler) http.Handler {
+// middleware rejects requests from clients that exceed the bucket. ipFor
+// resolves the address the bucket is keyed on.
+func (l *limiter) middleware(ipFor func(*http.Request) string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !l.allow(clientIP(r)) {
+		if !l.allow(ipFor(r)) {
 			w.Header().Set("Retry-After", "1")
 			http.Error(w, "rate limited", http.StatusTooManyRequests)
 			return
@@ -74,16 +77,55 @@ func (l *limiter) middleware(next http.Handler) http.Handler {
 	})
 }
 
-// clientIP returns the peer address.
-//
-// It deliberately ignores X-Forwarded-For. otosu terminates TLS itself, so the
-// peer is the real client; trusting a header here would let anyone spoof their
-// way around the rate limiter. If you later put a proxy in front, add an
-// explicit allowlist of trusted proxy addresses before honouring the header.
-func clientIP(r *http.Request) string {
+// peerIP returns the address otosu is actually talking to.
+func peerIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// clientIP resolves the address to rate limit on.
+//
+// X-Forwarded-For is honoured only when the immediate peer is a configured
+// trusted proxy. Trusting the header unconditionally would let anyone put a
+// fake address in it and walk straight past the rate limiter; ignoring it
+// behind a proxy is just as bad, because every request would then share one
+// bucket and a single prober would lock out everybody.
+func (s *Server) clientIP(r *http.Request) string {
+	peer := peerIP(r)
+	if len(s.trustedProxies) == 0 {
+		return peer
+	}
+
+	addr, err := netip.ParseAddr(peer)
+	if err != nil || !s.isTrustedProxy(addr) {
+		return peer
+	}
+
+	// Walk right to left and stop at the first address we did not put there.
+	// Anything further left was supplied by the client and cannot be believed.
+	forwarded := r.Header.Get("X-Forwarded-For")
+	parts := strings.Split(forwarded, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+		if err != nil {
+			continue
+		}
+		if !s.isTrustedProxy(candidate) {
+			return candidate.String()
+		}
+	}
+	return peer
+}
+
+func (s *Server) isTrustedProxy(addr netip.Addr) bool {
+	addr = addr.Unmap()
+	for _, prefix := range s.trustedProxies {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }

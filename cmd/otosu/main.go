@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -324,11 +325,24 @@ func runServe(args []string) error {
 	baseURL := fs.String("base-url", "", "public URL baked into the installer (default: derived from -domain or -addr)")
 	certDir := fs.String("cert-dir", "", "certificate cache directory (default: ~/.local/share/otosu/certs)")
 	tokenFlag := fs.String("token", "", "login token (default: $OTOSU_TOKEN, or generated and printed)")
+	trusted := fs.String("trusted-proxy", "",
+		"comma separated addresses or CIDRs whose X-Forwarded-For may be believed, e.g. 127.0.0.1")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if (*domain == "") == (*addr == "") {
-		return errors.New("pass exactly one of -domain (production) or -addr (development)")
+		return errors.New("pass exactly one of -domain (terminate TLS here) or -addr (behind a proxy, or local development)")
+	}
+
+	proxies, err := parsePrefixes(*trusted)
+	if err != nil {
+		return err
+	}
+	// Behind a TLS terminating proxy the public URL is the only way to know the
+	// real scheme, and it is what the installer must advertise.
+	if *domain == "" && *baseURL == "" {
+		fmt.Fprintln(os.Stderr,
+			"otosu: warning - no -base-url given, so the installer will advertise the local address")
 	}
 
 	token := *tokenFlag
@@ -347,15 +361,38 @@ func runServe(args []string) error {
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	cfg := serveConfig{
-		domain:    *domain,
-		addr:      *addr,
-		baseURL:   *baseURL,
-		certDir:   *certDir,
-		token:     token,
-		generated: generated,
-		log:       log,
+		domain:         *domain,
+		addr:           *addr,
+		baseURL:        *baseURL,
+		certDir:        *certDir,
+		token:          token,
+		generated:      generated,
+		trustedProxies: proxies,
+		log:            log,
 	}
 	return serve(cfg)
+}
+
+// parsePrefixes reads the -trusted-proxy list, accepting either a CIDR or a
+// bare address, which is the common case for a proxy on the same host.
+func parsePrefixes(list string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, field := range strings.Split(list, ",") {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		if prefix, err := netip.ParsePrefix(field); err == nil {
+			out = append(out, prefix)
+			continue
+		}
+		addr, err := netip.ParseAddr(field)
+		if err != nil {
+			return nil, fmt.Errorf("trusted-proxy %q is neither an address nor a CIDR", field)
+		}
+		out = append(out, netip.PrefixFrom(addr, addr.BitLen()))
+	}
+	return out, nil
 }
 
 // redirectToHTTPS sends plain HTTP callers to the TLS endpoint. autocert's own

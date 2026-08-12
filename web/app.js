@@ -28,6 +28,37 @@ function humanSize(n) {
   return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
 }
 
+// Browsers give a pasted clipboard image a placeholder name: Chrome uses
+// "image.png", and copying an image off a web page yields "unnamed.webp".
+// Those collide with every other paste, so replace them with a timestamp.
+const PLACEHOLDER_NAME = /^(image|unnamed|clipboard|screenshot)(\s*\(\d+\))?(\.\w+)?$/i;
+
+const MIME_EXT = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/avif': 'avif',
+  'image/svg+xml': 'svg',
+};
+
+function timestamp() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
+    + `-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
+/** Pick the name to seal into the drop, keeping real file names untouched. */
+function dropName(file) {
+  const raw = (file.name || '').trim();
+  if (raw && !PLACEHOLDER_NAME.test(raw)) return raw;
+
+  const fromName = raw.includes('.') ? raw.split('.').pop().toLowerCase() : '';
+  const ext = MIME_EXT[file.type] || fromName || 'bin';
+  return `shot-${timestamp()}.${ext}`;
+}
+
 function setStatus(msg, kind) {
   el.status.textContent = msg || '';
   el.status.className = 'note' + (kind ? ' ' + kind : '');
@@ -47,8 +78,9 @@ async function copy(text) {
 let busy = false;
 
 async function upload(file) {
+  const name = dropName(file);
   const key = newKey();
-  const blob = await seal(key, file.name || 'clipboard.png', file.type, await file.arrayBuffer());
+  const blob = await seal(key, name, file.type, await file.arrayBuffer());
 
   const res = await fetch('/api/drop', {
     method: 'POST',
@@ -67,7 +99,7 @@ async function upload(file) {
   }
 
   const { code } = await res.json();
-  return { ref: `${code}#${b64url(key)}`, name: file.name || 'clipboard.png', size: file.size };
+  return { ref: `${code}#${b64url(key)}`, name, size: file.size };
 }
 
 async function handleFiles(files) {
@@ -78,7 +110,7 @@ async function handleFiles(files) {
   el.bar.classList.remove('hidden');
   try {
     for (const f of list) {
-      setStatus(`Encrypting and uploading ${f.name || 'clipboard image'}…`);
+      setStatus(`Encrypting and uploading ${dropName(f)}…`);
       const drop = await upload(f);
       addDrop(drop);
       const copied = await copy(drop.ref);

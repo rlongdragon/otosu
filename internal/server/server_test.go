@@ -22,10 +22,18 @@ const testToken = "test-token-do-not-use"
 
 func newTestServer(t *testing.T, opt store.Options) (*httptest.Server, *http.Client) {
 	t.Helper()
+	// A plain http base URL, because httptest serves over HTTP and a Secure
+	// cookie would never be sent back. TestSecureCookieFollowsBaseURL covers the
+	// https case explicitly.
+	return newTestServerWithBase(t, opt, "http://otosu.example.com")
+}
+
+func newTestServerWithBase(t *testing.T, opt store.Options, base string) (*httptest.Server, *http.Client) {
+	t.Helper()
 
 	srv, err := New(Options{
 		Token:   testToken,
-		BaseURL: "https://otosu.example.com",
+		BaseURL: base,
 		Store:   store.New(opt),
 	})
 	if err != nil {
@@ -194,7 +202,7 @@ func TestOversizedDropRejected(t *testing.T) {
 }
 
 func TestInstallScriptCarriesBaseURL(t *testing.T) {
-	ts, c := newTestServer(t, store.Options{})
+	ts, c := newTestServerWithBase(t, store.Options{}, "https://otosu.example.com")
 	resp, err := c.Get(ts.URL + "/install")
 	if err != nil {
 		t.Fatalf("install: %v", err)
@@ -291,5 +299,48 @@ func TestPullWrongKeyFails(t *testing.T) {
 	wrong, _ := wire.NewKey()
 	if _, err := client.Pull(ts.URL, code.Ref{Code: dropCode, Key: wrong}, t.TempDir(), nil); err == nil {
 		t.Fatal("Pull succeeded with the wrong key")
+	}
+}
+
+// TestSecureCookieFollowsBaseURL pins the rule that makes otosu safe behind a
+// TLS terminating proxy: the listener is plain HTTP there, so only the public
+// URL reveals that the session cookie must be marked Secure.
+func TestSecureCookieFollowsBaseURL(t *testing.T) {
+	for _, tc := range []struct {
+		base       string
+		wantSecure bool
+	}{
+		{"https://otosu.example.com", true},
+		{"http://127.0.0.1:8099", false},
+	} {
+		t.Run(tc.base, func(t *testing.T) {
+			ts, _ := newTestServerWithBase(t, store.Options{}, tc.base)
+
+			body, _ := json.Marshal(map[string]string{"token": testToken})
+			resp, err := ts.Client().Post(ts.URL+"/api/login", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("login: %v", err)
+			}
+			defer resp.Body.Close()
+
+			var found *http.Cookie
+			for _, c := range resp.Cookies() {
+				if c.Name == sessionCookie {
+					found = c
+				}
+			}
+			if found == nil {
+				t.Fatal("no session cookie was set")
+			}
+			if found.Secure != tc.wantSecure {
+				t.Errorf("Secure = %v, want %v", found.Secure, tc.wantSecure)
+			}
+			if !found.HttpOnly {
+				t.Error("session cookie must be HttpOnly")
+			}
+			if found.SameSite != http.SameSiteStrictMode {
+				t.Error("session cookie must be SameSite=Strict")
+			}
+		})
 	}
 }
