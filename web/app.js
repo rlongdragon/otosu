@@ -75,6 +75,10 @@ async function copy(text) {
 
 // ------------------------------------------------------------------ upload ---
 
+// Only used if the server ever answers without expires_in; it matches the
+// store's own default TTL.
+const FALLBACK_LIFE_MS = 10 * 60 * 1000;
+
 let busy = false;
 
 async function upload(file) {
@@ -98,8 +102,9 @@ async function upload(file) {
     throw new Error(detail.error || `upload failed (${res.status})`);
   }
 
-  const { code } = await res.json();
-  return { ref: `${code}#${b64url(key)}`, name, size: file.size };
+  const { code, expires_in: ttl } = await res.json();
+  const life = Number(ttl) > 0 ? ttl * 1000 : FALLBACK_LIFE_MS;
+  return { ref: `${code}#${b64url(key)}`, name, size: file.size, life };
 }
 
 async function handleFiles(files) {
@@ -129,7 +134,34 @@ async function handleFiles(files) {
 
 // -------------------------------------------------------------------- view ---
 
-function addDrop({ ref, name, size }) {
+// Live drops whose bar still has something left to drain. One frame loop drives
+// them all, and it reads the clock rather than counting frames, so a
+// backgrounded tab comes back with the bars in the right place.
+const live = new Set();
+let draining = false;
+
+function drainFrame() {
+  const now = Date.now();
+  for (const d of live) {
+    const left = (d.expiresAt - now) / d.life;
+    d.fill.style.transform = `scaleX(${Math.max(0, left)})`;
+    if (left > 0) continue;
+
+    live.delete(d);
+    d.item.classList.add('expired');
+    d.btn.title = 'Expired. The server has already dropped this one.';
+  }
+  draining = live.size > 0;
+  if (draining) requestAnimationFrame(drainFrame);
+}
+
+function startDraining() {
+  if (draining) return;
+  draining = true;
+  requestAnimationFrame(drainFrame);
+}
+
+function addDrop({ ref, name, size, life }) {
   el.drops.classList.remove('hidden');
 
   const item = document.createElement('div');
@@ -155,8 +187,17 @@ function addDrop({ ref, name, size }) {
     setTimeout(() => { btn.textContent = label; }, 1200);
   });
 
-  item.append(head, btn);
+  const bar = document.createElement('div');
+  bar.className = 'drop-life';
+  bar.title = 'Time left before the server forgets this drop';
+  const fill = document.createElement('i');
+  bar.append(fill);
+
+  item.append(head, btn, bar);
   el.drops.prepend(item);
+
+  live.add({ item, btn, fill, life, expiresAt: Date.now() + life });
+  startDraining();
 }
 
 function showLogin(msg) {
@@ -193,6 +234,7 @@ el.loginForm.addEventListener('submit', async (e) => {
 
 el.logout.addEventListener('click', async () => {
   await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
+  live.clear();
   el.drops.textContent = '';
   el.drops.classList.add('hidden');
   showLogin();

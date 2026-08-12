@@ -116,7 +116,24 @@
     margin: .5rem 0 0;
   }
 
-  .drop-item { border-top: 1px solid var(--line); padding: .9rem 0; }
+  .drop-item { border-top: 1px solid var(--line); padding: .9rem 0; transition: opacity .6s; }
+  .drop-item.expired { opacity: .4; }
+  .drop-item.expired .ref { cursor: default; }
+  /* The life bar drains over the drop's TTL; empty means the code is dead. */
+  .drop-life {
+    height: 3px;
+    margin-top: .5rem;
+    border-radius: 2px;
+    background: var(--line);
+    overflow: hidden;
+  }
+  .drop-life i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transform-origin: left center;
+  }
+  .drop-item.expired .drop-life i { background: var(--muted); }
   .drop-item:first-child { border-top: 0; padding-top: 0; }
   .drop-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
   .drop-name { font-weight: 600; word-break: break-all; }

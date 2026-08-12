@@ -228,7 +228,12 @@ func (s *Server) handleCreateDrop(w http.ResponseWriter, r *http.Request) {
 		switch err := s.store.Put(c, blob); {
 		case err == nil:
 			s.log.Info("drop created", "code", c, "bytes", len(blob))
-			writeJSON(w, http.StatusOK, map[string]string{"code": c})
+			// expires_in lets the page show the drop's remaining life without
+			// hardcoding a TTL the operator may have changed.
+			writeJSON(w, http.StatusOK, map[string]any{
+				"code":       c,
+				"expires_in": int(s.store.TTL().Seconds()),
+			})
 			return
 		case errors.Is(err, store.ErrDuplicate):
 			continue

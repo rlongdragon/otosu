@@ -87,6 +87,9 @@ func New(opt Options) *Store {
 	}
 }
 
+// TTL returns how long a drop created now stays live.
+func (s *Store) TTL() time.Duration { return s.opt.TTL }
+
 // Put stores blob under code. The caller owns generating the code and must not
 // reuse one that is still live.
 func (s *Store) Put(code string, blob []byte) error {
