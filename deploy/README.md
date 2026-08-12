@@ -1,7 +1,7 @@
 # Deploying otosu
 
-The server is one static binary. It obtains its own TLS certificate, so there
-is no reverse proxy, no certbot and no cron job to maintain.
+The server is one static binary with no runtime dependencies. It can sit behind
+an existing reverse proxy, or terminate TLS itself with no proxy at all.
 
 ## Two ways to run it
 
@@ -87,15 +87,18 @@ and change `-addr` to match since loopback would not be reachable.
 
 ## Why the unit is locked down
 
-The service listens on the public internet and shares a machine with
+The service is reachable from the public internet and shares a machine with
 development work, so a compromise must not become a foothold. `ProtectHome`
 hides every home directory including SSH keys, `ProtectSystem=strict` makes the
-filesystem read-only apart from the certificate cache, and the capability set
-is reduced to `CAP_NET_BIND_SERVICE` so the process can bind 80 and 443 without
-ever being root.
+whole filesystem read-only, and the capability set is emptied entirely: behind a
+proxy the listener is an unprivileged port, so the process needs no capability
+at all.
 
 Drops are held in memory and never written to disk, so there is no state
-directory to protect and nothing to clean up after a restart.
+directory to protect and nothing to clean up after a restart. That is also why
+`ProtectSystem=strict` needs no `ReadWritePaths` exception. Terminating TLS in
+otosu instead is the one case that does: the certificate cache must be
+writable, and binding 443 needs `CAP_NET_BIND_SERVICE` back.
 
 ## Optional: fail2ban
 
