@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -82,5 +84,24 @@ func TestPermuteParses(t *testing.T) {
 	}
 	if fs.NArg() != 1 || fs.Arg(0) != "B4K7QW2M#key" {
 		t.Errorf("positional args = %q, want one code", fs.Args())
+	}
+}
+
+// TestTmuxPluginKeepsInputOutOfRunShell guards the prompt's input from
+// run-shell's format expansion. When the reference was spliced straight into
+// run-shell, a key starting with D, F, H, I, P, S, T, W or h lost its '#' to
+// one of tmux's short aliases, "#W" becoming the window name for instance.
+func TestTmuxPluginKeepsInputOutOfRunShell(t *testing.T) {
+	var buf bytes.Buffer
+	writeTmuxPlugin(&buf, "/usr/local/bin/otosu", "v")
+	script := buf.String()
+
+	stashed := strings.Count(script, "set -s @otosu_ref '%%'")
+	if all := strings.Count(script, "%%"); stashed == 0 || all != stashed {
+		t.Errorf("input substituted %d times, only %d of them into @otosu_ref:\n%s", all, stashed, script)
+	}
+	// Once for the key binding, once for the :otosu alias.
+	if n := strings.Count(script, `pull \"#{@otosu_ref}\"`) + strings.Count(script, `pull \\\"#{@otosu_ref}\\\"`); n != 2 {
+		t.Errorf("pull reads #{@otosu_ref} %d times, want 2:\n%s", n, script)
 	}
 }
