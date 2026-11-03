@@ -4,6 +4,7 @@
 //	otosu serve -domain otosu.example.com     run the server
 //	otosu pull B4K7QW2M#<key>                 collect a drop and hand it to the agent
 //	otosu tmux-plugin                         print the tmux integration script
+//	otosu claude-hook                         collect drops pasted into Claude Code
 package main
 
 import (
@@ -41,6 +42,8 @@ func main() {
 		err = runPull(os.Args[2:])
 	case "tmux-plugin":
 		err = runTmuxPlugin(os.Args[2:])
+	case "claude-hook":
+		err = runClaudeHook(os.Args[2:])
 	case "version", "-v", "--version":
 		fmt.Println("otosu", version)
 	case "help", "-h", "--help":
@@ -63,6 +66,7 @@ Usage:
   otosu serve [flags]        run the drop server
   otosu pull <code#key>      collect a drop and type its path into the agent
   otosu tmux-plugin          print the tmux integration script
+  otosu claude-hook          collect drops pasted into Claude Code (used by its plugin)
   otosu version
 
 Run "otosu <command> -h" for the flags of a command.

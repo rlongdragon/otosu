@@ -150,3 +150,35 @@ func TestParseRefErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestFindRefs(t *testing.T) {
+	a := Ref{Code: "B4K7QW2M", Key: make([]byte, wire.KeySize)}.String()
+	b := Ref{Code: "DH48TNX7", Key: []byte(strings.Repeat("k", wire.KeySize))}.String()
+
+	for _, tc := range []struct {
+		name string
+		text string
+		want []string
+	}{
+		{"none", "what is wrong here?", nil},
+		{"alone", a, []string{"B4K7QW2M"}},
+		{"inside a sentence", "看這張圖 " + a + "，哪裡錯了", []string{"B4K7QW2M"}},
+		{"two, in order", b + " and " + a, []string{"DH48TNX7", "B4K7QW2M"}},
+		{"duplicate collected once", a + " " + a, []string{"B4K7QW2M"}},
+		{"full URL", "https://otosu.example.com/" + a, []string{"B4K7QW2M"}},
+		{"glued to a longer token", "x" + a, nil},
+		{"key too short", "B4K7QW2M#aGVsbG8", nil},
+		{"key too long", a + "A", nil},
+		{"invalid code", "B4K7QW2U#" + strings.Repeat("A", 43), nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []string
+			for _, r := range FindRefs(tc.text) {
+				got = append(got, r.Code)
+			}
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("FindRefs(%q) = %q, want %q", tc.text, got, tc.want)
+			}
+		})
+	}
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "otosu",
+  "description": "Paste a screenshot or file into Claude Code running over SSH, end-to-end encrypted.",
+  "owner": {
+    "name": "rlongdragon",
+    "url": "https://github.com/rlongdragon"
+  },
+  "plugins": [
+    {
+      "name": "otosu",
+      "description": "Collects otosu drop codes pasted into a prompt, so Claude sees the file. Needs the otosu CLI.",
+      "source": "./claude-plugin",
+      "category": "productivity"
+    }
+  ]
+}

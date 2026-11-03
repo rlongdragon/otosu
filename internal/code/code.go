@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/rlongdragon/otosu/internal/wire"
@@ -125,4 +126,32 @@ func ParseRef(s string) (Ref, error) {
 // String renders the reference in the form the browser copies to the clipboard.
 func (r Ref) String() string {
 	return r.Code + "#" + keyEncoding.EncodeToString(r.Key)
+}
+
+// refPattern finds candidate references in free text. It is deliberately loose:
+// ParseRef has the final say on each candidate.
+var refPattern = regexp.MustCompile(`[0-9A-Za-z]{8}#[A-Za-z0-9_-]+`)
+
+// FindRefs returns the well formed references in text, such as a prompt the
+// user pasted one into, in order and without duplicates. A candidate glued to
+// a preceding letter or digit is part of some longer token and is skipped.
+func FindRefs(text string) []Ref {
+	var refs []Ref
+	seen := make(map[string]bool)
+	for _, loc := range refPattern.FindAllStringIndex(text, -1) {
+		if loc[0] > 0 && isAlnum(text[loc[0]-1]) {
+			continue
+		}
+		ref, err := ParseRef(text[loc[0]:loc[1]])
+		if err != nil || seen[ref.Code] {
+			continue
+		}
+		seen[ref.Code] = true
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+func isAlnum(b byte) bool {
+	return '0' <= b && b <= '9' || 'A' <= b && b <= 'Z' || 'a' <= b && b <= 'z'
 }

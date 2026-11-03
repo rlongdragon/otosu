@@ -71,6 +71,24 @@ expects it:
 | Aider | `/add /path/to/file` |
 | anything else | `/path/to/file` |
 
+### Claude Code plugin
+
+With the plugin, Claude Code collects drops itself, so tmux is not needed. It
+uses the `otosu` CLI from the installer above.
+
+```
+/plugin install otosu --marketplace rlongdragon/otosu
+```
+
+Then paste a code anywhere in a prompt, `B4K7QW2M#3sK9... what is wrong here?`,
+and Claude reads the file as if it had been attached. `/otosu:otosu <code#key>`
+does the same explicitly. The plugin only lets Claude read files inside the drop
+directory without asking; every other read keeps its usual permissions.
+
+Unlike with the tmux binding, the code and key end up in the conversation. A
+drop only lives until its short TTL runs out or it has been fetched a few times,
+so they are soon useless; if even that matters, use tmux.
+
 ## How it works
 
 ```

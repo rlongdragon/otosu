@@ -1,0 +1,35 @@
+{
+  "name": "otosu",
+  "description": "Collects otosu drop codes pasted into a prompt, so Claude sees the file. Needs the otosu CLI.",
+  "author": {
+    "name": "rlongdragon",
+    "url": "https://github.com/rlongdragon"
+  },
+  "homepage": "https://github.com/rlongdragon/otosu",
+  "license": "MIT",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh\"",
+            "timeout": 150
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
