@@ -14,6 +14,9 @@ puts only a short code through the terminal, where plain text has always worked.
 ④                        the file path appears in the agent's input
 ```
 
+With the [Claude Code plugin](#claude-code-plugin) step ③ is just pasting the
+code into your prompt, no tmux needed.
+
 Everything is encrypted before it leaves the browser. The server stores
 ciphertext it cannot read, and dev boxes store no credentials at all.
 
@@ -44,6 +47,8 @@ installs the binary to `~/.local/bin`, writes the server address, and registers
 the tmux integration. No token, no key, nothing secret ever lands on the box —
 which is what makes the command safe to paste anywhere.
 
+Using Claude Code? Add the [plugin](#claude-code-plugin) as well.
+
 To deploy the server itself, see [deploy/README.md](deploy/README.md).
 
 ## Usage
@@ -73,17 +78,31 @@ expects it:
 
 ### Claude Code plugin
 
-With the plugin, Claude Code collects drops itself, so tmux is not needed. It
-uses the `otosu` CLI from the installer above.
+With the plugin, Claude Code collects drops itself, so tmux is not needed and
+it works in any terminal. It drives the `otosu` CLI from the installer above,
+v0.3.0 or later; with an older one the plugin quietly does nothing.
+
+Inside Claude Code:
 
 ```
 /plugin install otosu --marketplace rlongdragon/otosu
 ```
 
-Then paste a code anywhere in a prompt, `B4K7QW2M#3sK9... what is wrong here?`,
-and Claude reads the file as if it had been attached. `/otosu:otosu <code#key>`
-does the same explicitly. The plugin only lets Claude read files inside the drop
-directory without asking; every other read keeps its usual permissions.
+Then use either form:
+
+```
+B4K7QW2M#3sK9... what is wrong in this screenshot?   # a code anywhere in a prompt
+/otosu:otosu B4K7QW2M#3sK9... what is wrong here?    # the explicit command
+```
+
+Claude reads the file as if it had been attached; several codes in one prompt
+are all collected. Behind it, a `UserPromptSubmit` hook runs `otosu claude-hook`
+to collect the drops into `~/.otosu`, and a `PreToolUse` hook lets Claude read
+files inside that directory without a permission prompt. Every other read keeps
+its usual permissions.
+
+To update, rerun the installer for the CLI and `/plugin update otosu` for the
+plugin.
 
 Unlike with the tmux binding, the code and key end up in the conversation. A
 drop only lives until its short TTL runs out or it has been fetched a few times,
