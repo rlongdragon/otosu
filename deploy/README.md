@@ -140,3 +140,6 @@ sudo systemctl start otosu
 ```
 
 Live drops are lost on restart by design. They expire within minutes anyway.
+
+This upgrades the server only. Dev boxes keep their CLI until the install
+command is run on them again, which also regenerates their tmux integration.

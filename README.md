@@ -34,6 +34,22 @@ configured host.
 [cc-clip]: https://github.com/ShunmeiCho/cc-clip
 [claude-ssh-image-skill]: https://github.com/AlexZeitler/claude-ssh-image-skill
 
+## Self-hosting
+
+There is no central service: you run the server, and everything else talks to
+yours. In order:
+
+1. **Server**, once. Deploy it under your own domain, passed as `-base-url`. See
+   [deploy/README.md](deploy/README.md).
+2. **CLI**, on each dev box. Run the install command your server's page shows,
+   [below](#install-on-a-dev-box). It points the box at your server.
+3. **Claude Code plugin**, optional. The [plugin](#claude-code-plugin) is the
+   same for everyone and carries no address: it runs the CLI, which talks to
+   whichever server its installer came from. No fork needed.
+
+Install the CLI before the plugin. The other way round works too; the plugin
+just does nothing until the CLI is there.
+
 ## Install on a dev box
 
 Log in to your otosu page and copy the command it shows:
@@ -49,7 +65,17 @@ which is what makes the command safe to paste anywhere.
 
 Using Claude Code? Add the [plugin](#claude-code-plugin) as well.
 
-To deploy the server itself, see [deploy/README.md](deploy/README.md).
+The server address lives in `~/.config/otosu/config` as a `server=` line. To
+point a box elsewhere, edit that line or run the other server's installer;
+`OTOSU_SERVER` or `-server` override it for a single run.
+
+To upgrade, run the install command again. It replaces the CLI and regenerates
+the tmux integration, which some fixes need.
+
+The installer always downloads the CLI from this repository's GitHub releases;
+only the server address comes from your server. To ship your own build, fork
+and change `REPO` in
+[internal/server/install.sh.tmpl](internal/server/install.sh.tmpl).
 
 ## Usage
 
